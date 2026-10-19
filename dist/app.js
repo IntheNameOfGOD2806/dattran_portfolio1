@@ -204,3 +204,168 @@ window.addEventListener('portfolio-motion', event => {
     demo.style.transform = '';
   }
 });
+
+// Color is part of the playground. Store only a local visual preference.
+const paletteButton = document.querySelector('.palette-toggle');
+const palettes = [{ id: 'orange', name: 'Cam' }, { id: 'violet', name: 'Tím' }, { id: 'lime', name: 'Lime' }];
+let paletteIndex = 0;
+try {
+  const saved = localStorage.getItem('dat-palette');
+  paletteIndex = Math.max(0, palettes.findIndex(palette => palette.id === saved));
+} catch {}
+function applyPalette() {
+  const palette = palettes[paletteIndex];
+  document.documentElement.dataset.palette = palette.id;
+  paletteButton.querySelector('.palette-name').textContent = palette.name;
+  paletteButton.setAttribute('aria-label', `Đổi bảng màu, hiện tại: ${palette.name}`);
+  paletteButton.title = `Đổi bảng màu, hiện tại: ${palette.name}`;
+}
+applyPalette();
+paletteButton.addEventListener('click', () => {
+  paletteIndex = (paletteIndex + 1) % palettes.length;
+  applyPalette();
+  try { localStorage.setItem('dat-palette', palettes[paletteIndex].id); } catch {}
+});
+
+// A bounded burst, with no continuous particle loop or work in hidden tabs.
+const confettiLayer = document.querySelector('.confetti-layer');
+let confettiTimer;
+function burstAt(x, y) {
+  if (motionPaused || document.hidden) return;
+  confettiLayer.replaceChildren();
+  clearTimeout(confettiTimer);
+  for (let i = 0; i < 28; i++) {
+    const bit = document.createElement('i');
+    bit.className = 'confetti-bit';
+    bit.style.left = `${x}px`;
+    bit.style.top = `${y}px`;
+    const angle = (Math.PI * 2 * i) / 28;
+    const distance = 70 + Math.random() * 150;
+    bit.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+    bit.style.setProperty('--dy', `${Math.sin(angle) * distance + 90}px`);
+    bit.style.setProperty('--spin', `${Math.random() * 700 - 350}deg`);
+    confettiLayer.appendChild(bit);
+  }
+  confettiTimer = setTimeout(() => confettiLayer.replaceChildren(), 1200);
+}
+const sticker = document.querySelector('.burst-sticker');
+sticker.addEventListener('click', () => {
+  const rect = sticker.getBoundingClientRect();
+  burstAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  sticker.querySelector('small').textContent = 'SHIPPED ✓';
+  clearTimeout(sticker.resetTimer);
+  sticker.resetTimer = setTimeout(() => { sticker.querySelector('small').textContent = 'BẤM THỬ ↗'; }, 1800);
+});
+
+const halo = document.querySelector('.cursor-halo');
+let pointerFrame = 0;
+let pointerPosition = { x: 0, y: 0 };
+document.addEventListener('pointermove', event => {
+  if (!finePointer.matches || motionPaused || event.pointerType === 'touch') return;
+  pointerPosition = { x: event.clientX, y: event.clientY };
+  if (pointerFrame) return;
+  pointerFrame = requestAnimationFrame(() => {
+    pointerFrame = 0;
+    halo.style.transform = `translate(${pointerPosition.x}px, ${pointerPosition.y}px)`;
+    halo.style.opacity = '1';
+  });
+}, { passive: true });
+document.addEventListener('pointerover', event => {
+  halo.classList.toggle('active', Boolean(event.target.closest('a, button, input, #scene-container')));
+});
+document.documentElement.addEventListener('pointerleave', () => { halo.style.opacity = '0'; });
+window.addEventListener('blur', () => { halo.style.opacity = '0'; });
+window.addEventListener('portfolio-motion', event => {
+  if (event.detail.paused) {
+    confettiLayer.replaceChildren();
+    halo.style.opacity = '0';
+  }
+});
+
+// A deterministic educational demo. It never sends deployment commands.
+const deployButton = document.querySelector('.deploy-button');
+const deployStatus = document.querySelector('.deploy-status');
+const deployStages = [...document.querySelectorAll('.pipeline-stages li')];
+const stageMessages = [
+  '01 / Build — Đóng gói ứng dụng thành container image.',
+  '02 / Test — Kiểm tra ứng dụng trước khi triển khai.',
+  '03 / Deploy — Cập nhật workload trên Kubernetes.',
+  '04 / Observe — Theo dõi metrics và logs sau triển khai.'
+];
+let deployTimer;
+let deployRunning = false;
+let deployIndex = 0;
+function advanceDeploy() {
+  if (document.hidden || !deployRunning) return;
+  deployStages.forEach((stage, i) => {
+    stage.classList.toggle('done', i < deployIndex);
+    stage.classList.toggle('running', i === deployIndex);
+    if (i === deployIndex) stage.setAttribute('aria-current', 'step');
+    else stage.removeAttribute('aria-current');
+  });
+  if (deployIndex === deployStages.length) {
+    deployRunning = false;
+    deployStatus.textContent = '✓ Mô phỏng hoàn tất. Build → Test → Deploy → Observe.';
+    deployButton.disabled = false;
+    deployButton.innerHTML = 'Chạy lại <span aria-hidden="true">↻</span>';
+    const rect = deployButton.getBoundingClientRect();
+    if (rect.top > 0 && rect.bottom < window.innerHeight) burstAt(rect.left + rect.width / 2, rect.top);
+    return;
+  }
+  deployStatus.textContent = stageMessages[deployIndex];
+  deployIndex++;
+  deployTimer = setTimeout(advanceDeploy, 850);
+}
+deployButton.addEventListener('click', () => {
+  if (deployRunning) return;
+  deployRunning = true;
+  deployIndex = 0;
+  deployButton.disabled = true;
+  deployButton.textContent = 'Đang chạy…';
+  advanceDeploy();
+});
+document.addEventListener('visibilitychange', () => {
+  halo.style.opacity = '0';
+  if (document.hidden) {
+    clearTimeout(deployTimer);
+    confettiLayer.replaceChildren();
+  } else if (deployRunning) advanceDeploy();
+});
+
+// This terminal recognizes a small allowlist; it never evaluates user input.
+const terminalForm = document.querySelector('.terminal-form');
+const terminalInput = document.querySelector('#terminal-input');
+const terminalOutput = document.querySelector('.terminal-output');
+const terminalCommands = {
+  help: 'Lệnh có sẵn: whoami · stack · projects · contact · clear',
+  whoami: 'Trần Thành Đạt / Junior DevOps Engineer\nHà Nội · Software → Infrastructure',
+  stack: 'Linux · Docker · Kubernetes · OpenShift\nGitLab CI/CD · Terraform · Ansible\nPrometheus · Grafana · EFK',
+  projects: 'terra / Kubernetes trên AWS\nTerraform → Ansible → kubeadm\nXem phần Dự án để khám phá repo và kiến trúc.',
+  contact: 'Email: tranthanhdat4321@gmail.com\nGitHub: IntheNameOfGOD2806'
+};
+const commandHistory = [];
+let historyIndex = 0;
+terminalForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const command = terminalInput.value.trim().toLowerCase();
+  if (!command) return;
+  commandHistory.push(command);
+  if (commandHistory.length > 30) commandHistory.shift();
+  historyIndex = commandHistory.length;
+  terminalInput.value = '';
+  if (command === 'clear') { terminalOutput.replaceChildren(); return; }
+  const output = document.createElement('p');
+  const response = Object.hasOwn(terminalCommands, command)
+    ? terminalCommands[command]
+    : `Không tìm thấy lệnh “${command}”. Gõ help để xem hướng dẫn.`;
+  output.textContent = `$ ${command}\n${response}`;
+  terminalOutput.appendChild(output);
+  while (terminalOutput.children.length > 12) terminalOutput.firstElementChild.remove();
+  terminalOutput.scrollTop = terminalOutput.scrollHeight;
+});
+terminalInput.addEventListener('keydown', event => {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+  event.preventDefault();
+  historyIndex = Math.max(0, Math.min(commandHistory.length, historyIndex + (event.key === 'ArrowUp' ? -1 : 1)));
+  terminalInput.value = commandHistory[historyIndex] || '';
+});
